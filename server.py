@@ -1,4 +1,28 @@
 import socket
+from flask import Flask, jsonify
+import psycopg2
+
+
+#credentials: postgresql://neondb_owner:npg_l38UOSViAEwZ@ep-small-surf-a59ig0mj-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+
+db_credential = "postgresql://neondb_owner:npg_l38UOSViAEwZ@ep-small-surf-a59ig0mj-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+app = Flask(__name__)
+
+def connect_db():
+    connect = psycopg2.connect(db_credential)
+    cur = connect.cursor()
+    cur.execute("SELECT * FROM DATABASE_virtual;")
+    rows = cur.fetchall()
+    cur.close()
+    connect.close()
+    return rows
+
+@app.route("/get_data", methods=["GET"])
+
+def fetch():
+    data = connect_db()
+    return jsonify(data)
+
 
 
 serverIP = "0.0.0.0"
