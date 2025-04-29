@@ -1,50 +1,30 @@
-import os
 import socket
 
-maxByteToReceive = 1024
-flag = True
+#Connecting to server
+serverIP = input("Enter Server IP: ")
+serverPort = int(input("Enter Server Port: "))
 
-destination = input("Destination IP: ")
-port = int(input("Port Number: "))
+clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+clientSocket.connect((serverIP, serverPort))
 
-myTCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-myTCPSocket.connect((destination, port))
+print("\nConnected to server.")
+print("Select avaliable query: ")
+print("Q1:  What is the average moisture inside my kitchen fridge in the past three hours?")
+print("Q2: What is the average water consumption per cycle in my smart dishwasher?")
+print("Q3: hich device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?")
+print("Type 'quit' to disconnect\n")
 
-while flag:
-    smallLoop = True
-    
-    print(f"Please select from the following options: ")
-    
-    while smallLoop:
-        print(f"    1. The average moisture inside the kitchen fridge in the past three hours")
-        print(f"    2. The average water consumption per cycle in the smart dishwasher")
-        print(f"    3. The device that consumed more electricity among the three IoT devices (two refrigerators and a dishwasher)")
-        selection = input("Please enter your choice: ")
-        if selection == 1:
-            smallLoop = False
-            pass
-        elif selection == 2:
-            smallLoop = False
-            pass
-        elif selection == 3:
-            smallLoop = False
-            pass
-
-        else:
-            print(f"Sorry, this query cannot be processed. Please try one of the following:")
+while True:
+    user_input = input("Enter query (Q1/Q2/Q3/quit): ")
 
 
-    myTCPSocket.sendall(selection.encode('utf-8'))
-    serverReponse = myTCPSocket.recv(1024)
+    clientSocket.send(user_input.encode('utf-8'))
+    serverResponse = clientSocket.recv(1024).decode('utf-8')
+    print(f"Server Response: {serverResponse}")
 
-    print(f"Server Response: {serverReponse.decode()}")
-    flag = input("Continue or Quit: ").lower()
+    if user_input.lower() == 'quit':
+        break
 
-    if flag == "quit":
-        flag = False
-        message = 'quit'
-        myTCPSocket.sendall(message.encode('utf-8'))
-        serverReponse = myTCPSocket.recv(1024)
-        print(f"{serverReponse.decode()}")
+clientSocket.close()
+print("Connection closed.")
 
-myTCPSocket.close()
