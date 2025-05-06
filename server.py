@@ -33,26 +33,62 @@ DeviceTables = {SmartFridgeID: "smartfridge1_data", SmartFridge2ID: "smartfridge
 #Mapping Device names to ID
 DeviceNames = {SmartFridgeID: "SmartFridge1", SmartFridge2ID: "SmartFridge2", SmartWasherID: "SmartWasher"}
 
+
+#Rebuild tables
+def rebuild_tables():
+    for device_id, table in DeviceTables.items():
+        cursor.execute(f"""
+            SELECT
+                payload->>'asset_uid' AS device_id,
+                key AS sensor_type,
+                (value)::NUMERIC AS value,
+                to_timestamp((payload->>'timestamp')::BIGINT) AS ts
+            FROM assignment_data_virtual
+            CROSS JOIN LATERAL jsonb_each_text(payload::jsonb)
+            WHERE key NOT IN ('timestamp', 'topic', 'parent_asset_uid', 'asset_uid', 'board_name')
+              AND cmd = 'publish'
+              AND payload->>'asset_uid' = %s;
+        """, (device_id,))
+        rows = cursor.fetchall()
+
+        for row in rows:
+            cursor.execute(sql.SQL("""
+                INSERT INTO {} (device_id, sensor_type, value, timestamp)
+                VALUES(%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING;
+            """).format(sql.Identifier(table)), row)
+
 #Update each device table from virtua
 def update_tables():
-    cursor.execute("""
-        SELECT
-            payload->>'asset_uid' AS device_id,
-            key AS sensor_type,
-            (value)::NUMERIC AS value,
-            to_timestamp((payload->>'timestamp')::BIGINT) AS ts
-        FROM assignment_data_virtual
-        CROSS JOIN LATERAL jsonb_each_text(payload::jsonb)
-        WHERE key NOT IN ('timestamp', 'topic', 'parent_asset_uid', 'asset_uid', 'board_name')
-          AND cmd = 'publish';
+    for device_id, table in DeviceTables.items():
+        cursor.execute(sql.SQL("SELECT MAX(timestamp) FROM {}").format(sql.Identifier(table)))
+        max_ts = cursor.fetchone()[0]
+
+        if max_ts is None:
+            time_filter = ""
+        else:
+            time_filter = f"AND to_timestamp((payload->>'timestamp')::BIGINT) > '{max_ts}'"
+
+        query = f"""
+            SELECT
+                payload->>'asset_uid' AS device_id,
+                key AS sensor_type,
+                (value)::NUMERIC AS value,
+                to_timestamp((payload->>'timestamp')::BIGINT) AS ts
+            FROM assignment_data_virtual
+            CROSS JOIN LATERAL jsonb_each_text(payload::jsonb)
+            WHERE key NOT IN ('timestamp', 'topic', 'parent_asset_uid', 'asset_uid', 'board_name')
+            AND cmd = 'publish'
+            AND payload ->>'asset_uid' = '{device_id}'
+            {time_filter};
             
-    """)
+        """
 
-    rows = cursor.fetchall()
+        cursor.execute(query)
+        rows = cursor.fetchall()
 
-    for device_id, sensor_type, value, ts in rows:
-        table = DeviceTables.get(device_id)
-        if table:
+
+        for row in rows:
             cursor.execute(sql.SQL("""
                 INSERT INTO {} (device_id, sensor_type, value, timestamp)
                 VALUES (%s, %s, %s, %s)
@@ -98,16 +134,24 @@ try:
         """
     }
 
+    tables_made = False
+    
     for table_name, create_sql in table_queries.items():
+        cursor.execute("""
+            SELECT EXISTS(
+                SELECT FROM information_schema.tables
+                WHERE table_name = %s
+            );
+        """, (table_name,))
+        exists = cursor.fetchone()[0]
+
+        if not exists:
+            tables_made = True
+
         cursor.execute(create_sql)
 
-    #Clear tables
-    for table in DeviceTables.values():
-        cursor.execute(sql.SQL("TRUNCATE {} RESTART IDENTITY;").format(sql.Identifier(table)))
-
-    #Load with data
-    update_tables()
-
+    if tables_made:
+        rebuild_tables()
 
 except Exception as e:
     print(f"Failed to connect to database or updata data: {e}")
