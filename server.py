@@ -51,7 +51,7 @@ def rebuild_tables():
         """, (device_id,))
         rows = cursor.fetchall()
 
-        for row in rows:
+        for device_id, sensor_type, value, ts in rows:
             cursor.execute(sql.SQL("""
                 INSERT INTO {} (device_id, sensor_type, value, timestamp)
                 VALUES(%s, %s, %s, %s)
@@ -88,7 +88,7 @@ def update_tables():
         rows = cursor.fetchall()
 
 
-        for row in rows:
+        for device_id, sensor_type, value, ts in rows:
             cursor.execute(sql.SQL("""
                 INSERT INTO {} (device_id, sensor_type, value, timestamp)
                 VALUES (%s, %s, %s, %s)
