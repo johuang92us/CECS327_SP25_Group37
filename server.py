@@ -27,8 +27,37 @@ Fridge2_Ammeter = "Ammeter - SmartFridge2"
 Washer_Water = "Water Consumption Sensor - SmartWasher"
 Washer_Ammeter = "Ammeter - SmartWasher"
 
+#Mapping Tables
+DeviceTables = {SmartFridgeID: "smartfridge1_data", SmartFridge2ID: "smartfridge2_data", SmartWasherID: "smartwasher_data"}
+
 #Mapping Device names to ID
 DeviceNames = {SmartFridgeID: "SmartFridge1", SmartFridge2ID: "SmartFridge2", SmartWasherID: "SmartWasher"}
+
+#Update each device table from virtua
+def update_tables():
+    cursor.execute("""
+        SELECT
+            payload->>'asset_uid' AS device_id,
+            key AS sensor_type,
+            (value)::NUMERIC AS value,
+            to_timestamp((payload->>'timestamp')::BIGINT) AS ts
+        FROM assignment_data_virtual
+        CROSS JOIN LATERAL jsonb_each_text(payload::jsonb)
+        WHERE key NOT IN ('timestamp', 'topic', 'parent_asset_uid', 'asset_uid', 'board_name')
+          AND cmd = 'publish';
+            
+    """)
+
+    rows = cursor.fetchall()
+
+    for device_id, sensor_type, value, ts in rows:
+        table = DeviceTables.get(device_id)
+        if table:
+            cursor.execute(sql.SQL("""
+                INSERT INTO {} (device_id, sensor_type, value, timestamp)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING;
+            """).format(sql.Identifier(table)), (device_id, sensor_type,value, ts))
 
 #Connect to PostgreSQL Database
 try:
@@ -36,23 +65,49 @@ try:
     db_conn.autocommit = True
     cursor = db_conn.cursor()
 
-    #Clear table
-    cursor.execute("TRUNCATE assignment_data RESTART IDENTITY;")
+    table_queries = {
+        "smartfridge1_data": """
+            CREATE TABLE IF NOT EXISTS smartfridge1_data (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                sensor_type TEXT NOT NULL,
+                value NUMERIC NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL,
+                UNIQUE (device_id, sensor_type, timestamp)
+            );
+        """,
+        "smartfridge2_data": """
+            CREATE TABLE IF NOT EXISTS smartfridge2_data (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                sensor_type TEXT NOT NULL,
+                value NUMERIC NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL,
+                UNIQUE (device_id, sensor_type, timestamp)
+            );
+        """,
+        "smartwasher_data": """
+            CREATE TABLE IF NOT EXISTS smartwasher_data (
+                id SERIAL PRIMARY KEY,
+                device_id TEXT NOT NULL,
+                sensor_type TEXT NOT NULL,
+                value NUMERIC NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL,
+                UNIQUE (device_id, sensor_type, timestamp)
+            );
+        """
+    }
 
-    #Automated Update: Transfer data from assignment_data_virtual to assignment_data
-    cursor.execute("""
-        INSERT INTO assignment_data (device_id, sensor_type, value, timestamp)
-        SELECT
-            payload->>'asset_uid' AS device_id,
-            key AS sensor_type,
-            (value)::NUMERIC AS value,
-            to_timestamp((payload->>'timestamp')::BIGINT) AT TIME ZONE 'UTC'
-        FROM assignment_data_virtual
-        CROSS JOIN LATERAL jsonb_each_text(payload::jsonb)
-        WHERE key NOT IN ('timestamp', 'topic', 'parent_asset_uid', 'asset_uid', 'board_name')
-          AND cmd = 'publish';
-    """)
-    print("assignment_data table updated successfully from virtual table.")
+    for table_name, create_sql in table_queries.items():
+        cursor.execute(create_sql)
+
+    #Clear tables
+    for table in DeviceTables.values():
+        cursor.execute(sql.SQL("TRUNCATE {} RESTART IDENTITY;").format(sql.Identifier(table)))
+
+    #Load with data
+    update_tables()
+
 
 except Exception as e:
     print(f"Failed to connect to database or updata data: {e}")
@@ -60,40 +115,8 @@ except Exception as e:
 
 #Setting up TCP server
 serverIP = input("Enter Server IP: ")
-serverPort = int(input("Enter Server Port (e.g., 5000): "))
-
+serverPort = int(input("Enter Server Port: "))
 myTCPSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-elif message == "Q3":
-    try:
-        cursor.execute("""
-            SELECT device_id, SUM(value)
-            FROM assignment_data
-            WHERE sensor_type IN (%s, %s, %s)
-            GROUP BY device_id;
-        """, (Fridge1_Ammeter, Fridge2_Ammeter, Washer_Ammeter))
-
-        results = cursor.fetchall()
-        device_kwh = {}
-
-        for device_id, total_current in results:
-            if device_id in (SmartFridgeID, SmartFridge2ID):
-                # Fridge = 1-minute interval → multiply by 0.002
-                kwh = float(total_current) * 0.002
-            else:
-                # Dishwasher = 1-hour interval → multiply by 0.12
-                kwh = float(total_current) * 0.12
-            device_kwh[device_id] = kwh
-
-        if device_kwh:
-            highest_device = max(device_kwh, key=device_kwh.get)
-            highest_kwh = device_kwh[highest_device]
-            device_name = DeviceNames.get(highest_device, highest_device)
-            response = f"Device with Highest Electricity Usage: {device_name} ({highest_kwh:.2f} kWh)"
-        else:
-            response = "No electricity usage data available."
-
-    except Exception as e:
-        response = f"Error querying electricity usage: {e}"
 myTCPSocket.bind((serverIP, serverPort))
 myTCPSocket.listen(5)
 
@@ -103,7 +126,7 @@ while True:
     incomingSocket, incomingAddress = myTCPSocket.accept()
     print(f"Connected to {incomingAddress}")
     while True:
-        message = incomingSocket.recv(1024).decode('utf-8')
+        message = incomingSocket.recv(1024).decode('utf-8').strip()
         if not message:
             break
         print(f"Received Message: {message}")
@@ -113,89 +136,99 @@ while True:
             incomingSocket.send(response.encode('utf-8'))
             break
 
+        try:
+            update_tables()
+        except Exception as e:
+            print(f"Warning Failed to update tables before query: {e}")
+
         #Processing Queries
-        if message == "Q1":
+        if message == "1":
             try:
-                #Average for SmartFridge1
                 cursor.execute("""
                     SELECT AVG(value)
-                    FROM assignment_data
-                    WHERE device_id = %s
-                      AND sensor_type = %s
+                    FROM smartfridge1_data
+                    WHERE sensor_type = %s
                       AND (timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >
                           (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') - INTERVAL '3 HOURS';
-                """, (SmartFridgeID, Fridge1_Moisture))
-                avg_moisture_fridge1 = cursor.fetchone()[0]
+                """, (Fridge1_Moisture,))
+                fridge1_avg = cursor.fetchone()[0]
 
-                #Average for SmartFridge2
                 cursor.execute("""
                     SELECT AVG(value)
-                    FROM assignment_data
-                    WHERE device_id = %s
-                      AND sensor_type = %s
+                    FROM smartfridge2_data
+                    WHERE sensor_type = %s
                       AND (timestamp AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') >
                           (NOW() AT TIME ZONE 'UTC' AT TIME ZONE 'America/Los_Angeles') - INTERVAL '3 HOURS';
-                """, (SmartFridge2ID, Fridge2_Moisture))
-                avg_moisture_fridge2 = cursor.fetchone()[0]
+                """, (Fridge2_Moisture,))
+                fridge2_avg = cursor.fetchone()[0]
 
-                if avg_moisture_fridge1 is not None and avg_moisture_fridge2 is not None:
+                if fridge1_avg is not None and fridge2_avg is not None:
                     response = (
-                            f"Average Moisture (Last 3 Hours, PST):\n"
-                            f"Smart Fridge 1: {avg_moisture_fridge1:.2f}%RH\n"
-                            f"Smart Fridge 2: {avg_moisture_fridge2:.2f}%RH"
+                        f"Average Moisture (Last 3 Hours, PST):\n"
+                        f"Smart Fridge 1: {fridge1_avg:.2f}%RH\n"
+                        f"Smart Fridge 2: {fridge2_avg:.2f}%RH"
                     )
                 else:
                     response = "No moisture data available for one or both refrigerators."
-
+            
             except Exception as e:
                 response = f"Error querying moisture: {e}"
 
-        elif message == "Q2":
+        elif message == "2":
             try:
                 cursor.execute("""
                     SELECT AVG(value)
-                    FROM assignment_data
-                    WHERE device_id = %s
-                        AND sensor_type = %s;
-                """, (SmartWasherID, Washer_Water))
-                avg_water = cursor.fetchone()[0]
-                response = f"Average Dishwasher Water Usage: {avg_water:.2f} gallons" if avg_water else "No water consumption data available."
+                    FROM smartwasher_data
+                    WHERE sensor_type = %s;
+                """, (Washer_Water,))
+                water_avg= cursor.fetchone()[0]
+                if  water_avg is not None:
+                    response = f"Average Dishwasher Water Usage: {water_avg:.2f} gallons"
+                else:
+                    response = "No water consumption data available for Dishwasher."
+
             except Exception as e:
                 response = f"Error querying water consumption: {e}"
 
-        elif message == "Q3":
+        elif message == "3":
             try:
-                cursor.execute("""
-                    SELECT device_id, SUM(value)
-                    FROM assignment_data
-                    WHERE sensor_type IN (%s, %s, %s)
-                    GROUP BY device_id;
-                """, (Fridge1_Ammeter, Fridge2_Ammeter, Washer_Ammeter))
-
-                results = cursor.fetchall()
                 device_kwh = {}
+                    
+                cursor.execute("""
+                    SELECT SUM(value)
+                    FROM smartfridge1_data
+                    WHERE sensor_type = %s
+                """, (Fridge1_Ammeter,))
+                result = cursor.fetchone()[0]
+                if result is not None:
+                    device_kwh[SmartFridgeID] = float(result) * 0.006
 
-                for device_id, total_current in results:
-                    if device_id in (SmartFridgeID, SmartFridge2ID):
-                        # Fridge = 1-minute interval → multiply by 0.002
-                        kwh = float(total_current) * 0.002
-                    else:
-                        # Dishwasher = 1-hour interval → multiply by 0.12
-                        kwh = float(total_current) * 0.12
+                cursor.execute("""
+                    SELECT SUM(value)
+                    FROM smartfridge2_data
+                    WHERE sensor_type = %s
+                """, (Fridge2_Ammeter,))
+                result = cursor.fetchone()[0]
+                if result is not None:
+                    device_kwh[SmartFridge2ID] = float(result) * 0.006
 
-                device_kwh[device_id] = kwh
+                cursor.execute("""
+                    SELECT SUM(value)
+                    FROM smartwasher_data
+                    WHERE sensor_type = %s
+                """, (Washer_Ammeter,))
+                result = cursor.fetchone()[0]
+                if result is not None:
+                    device_kwh[SmartWasherID] = float(result) * 0.36
 
                 if device_kwh:
-                    highest_device = max(device_kwh, key=device_kwh.get)
-                    highest_kwh = device_kwh[highest_device]
-                    device_name = DeviceNames.get(highest_device, highest_device)
-                    response = f"Device with Highest Electricity Usage: {device_name} ({highest_kwh:.2f} kWh)"
+                    highest_use = max(device_kwh, key = device_kwh.get)
+                    response = f"Device with Highest Electricity Usage: {DeviceNames[highest_use]} ({device_kwh[highest_use]:.2f} kWh)"
                 else:
                     response = "No electricity usage data available."
 
             except Exception as e:
                 response = f"Error querying electricity usage: {e}"
-
                 
         else:
             response = "Invalid Query. Send Q1/Q2/Q3/quit."
