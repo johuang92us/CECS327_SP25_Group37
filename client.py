@@ -9,13 +9,13 @@ clientSocket.connect((serverIP, serverPort))
 
 print("\nConnected to server.")
 print("Select avaliable query: ")
-print("Q1:  What is the average moisture inside my kitchen fridge in the past three hours?")
-print("Q2: What is the average water consumption per cycle in my smart dishwasher?")
-print("Q3: hich device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?")
+print("1:  What is the average moisture inside my kitchen fridge in the past three hours?")
+print("2: What is the average water consumption per cycle in my smart dishwasher?")
+print("3: hich device consumed more electricity among my three IoT devices (two refrigerators and a dishwasher)?")
 print("Type 'quit' to disconnect\n")
 
 while True:
-    user_input = input("Enter query (Q1/Q2/Q3/quit): ")
+    user_input = input("Enter query (1/2/3/quit): ")
 
 
     clientSocket.send(user_input.encode('utf-8'))
