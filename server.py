@@ -34,8 +34,8 @@ DeviceTables = {SmartFridgeID: "smartfridge1_data", SmartFridge2ID: "smartfridge
 DeviceNames = {SmartFridgeID: "SmartFridge1", SmartFridge2ID: "SmartFridge2", SmartWasherID: "SmartWasher"}
 
 
-#Rebuild tables
-def rebuild_tables():
+#Build tables
+def build_tables():
     for device_id, table in DeviceTables.items():
         cursor.execute(f"""
             SELECT
@@ -58,7 +58,7 @@ def rebuild_tables():
                 ON CONFLICT DO NOTHING;
             """).format(sql.Identifier(table)), row)
 
-#Update each device table from virtua
+#Update each device table from virtual
 def update_tables():
     for device_id, table in DeviceTables.items():
         cursor.execute(sql.SQL("SELECT MAX(timestamp) FROM {}").format(sql.Identifier(table)))
@@ -151,7 +151,7 @@ try:
         cursor.execute(create_sql)
 
     if tables_made:
-        rebuild_tables()
+        build_tables()
 
 except Exception as e:
     print(f"Failed to connect to database or updata data: {e}")
