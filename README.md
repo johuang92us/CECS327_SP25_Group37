@@ -59,8 +59,8 @@ In VM 1 (Server VM):
 Run the server program: python3 server.py
 
 When prompted, enter:
-Enter Server IP: <Internal IP of this VM>
-Enter Server Port: e.g. 5000
+- Enter Server IP: <Internal IP of this VM>
+- Enter Server Port: e.g. 5000
 
 *Make sure the firewall for this VM allows for TCP traffic on this port
 
@@ -69,8 +69,8 @@ In VM 2 (CLient VM):
 Run the client program: python3 client.py
 
 When prompted, enter:
-Enter Server IP: <Internal IP of Server VM>
-Enter Server Port: <Same port as server VM>
+- Enter Server IP: <Internal IP of Server VM>
+- Enter Server Port: <Same port as server VM>
 
 When prompted, enter your query as instructed:
 1. What is the average moisture inside my kitchen fridge in the past three hours? (1)
