@@ -5,9 +5,9 @@ This assignment demonstrates an end-to-end IoT system with realtime querying of 
 GitHub Repository: [https://github.com/johuang92us/CECS327_SP25_Group37](https://github.com/johuang92us/CECS327_SP25_Group37)
 
 Project Files:
-‘server.py’ - TCP server that connects to database, processes queries, and returns results
-‘client.py’ - TCP client that user interacts with to send queries and receive responded
-‘README.md’ - Instructions for setup and usage
+- ‘server.py’ - TCP server that connects to database, processes queries, and returns results
+- ‘client.py’ - TCP client that user interacts with to send queries and receive responded
+- ‘README.md’ - Instructions for setup and usage
 
 Before proceeding, ensure you have the following:
 - Two Google Cloud Windows VMs (one for Server, one for Client)
@@ -47,7 +47,7 @@ sslmode = "require"
 
 If you don’t know your credentials, you can go to NeonDB Dashboard > Connect > Connection String. It should be structured like so:
 
-postgresql://<username>:<password>@<host>/<database>?sslmode=require
+postgresql://<username>:<password>@<host>/<database_name>?sslmode=require
 
 Insert your credentials as instructed.
 
