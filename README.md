@@ -38,12 +38,12 @@ Step 2: Configure Database Access
 In Server VM:
 
 Edit the top section of server.py with NeonDB credentials:
-DBhost = "<your_host_url>"
-DBname = "<your_database_name>"
-DBuser = "<your_user>"
-DBpassword = "<your_password>"
-DBport = "5432"
-sslmode = "require"
+- DBhost = "<your_host_url>"
+- DBname = "<your_database_name>"
+- DBuser = "<your_user>"
+- DBpassword = "<your_password>"
+- DBport = "5432"
+- sslmode = "require"
 
 If you don’t know your credentials, you can go to NeonDB Dashboard > Connect > Connection String. It should be structured like so:
 
