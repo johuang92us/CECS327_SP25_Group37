@@ -47,7 +47,7 @@ sslmode = "require"
 
 If you don’t know your credentials, you can go to NeonDB Dashboard > Connect > Connection String. It should be structured like so:
 
-postgresql://<username>:<password>@<host>/<database_name>?sslmode=require
+postgresql://[username]:[password]@[host]/[database_name]?sslmode=require
 
 Insert your credentials as instructed.
 
